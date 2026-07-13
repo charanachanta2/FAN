@@ -378,3 +378,18 @@ footer {
   border-top: 1px solid var(--turf-600);
   letter-spacing: .02em;
 }
+
+/* ---------------------------------------------------------------------
+   LAYOUT UTILITIES
+   Small, reusable utility classes used instead of inline `style="..."`
+   attributes, so the page's CSP can require styleSrc 'self' only (no
+   'unsafe-inline') and every visual rule lives in one stylesheet.
+   ---------------------------------------------------------------------*/
+.mt-md { margin-top: 12px; }
+.mt-lg { margin-top: 24px; }
+.flex-1 { flex: 1; min-width: 200px; }
+.flex-1-narrow { flex: 1; min-width: 160px; }
+.flex-2 { flex: 2; min-width: 220px; }
+.align-end { align-self: flex-end; }
+.lang-custom-input { display: none; width: 110px; }
+.lang-custom-input.is-visible { display: inline-block; }

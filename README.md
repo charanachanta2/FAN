@@ -1,9 +1,9 @@
 # 🏟️ Stadium Copilot — FIFA World Cup 2026
 
 A GenAI-powered stadium operations and fan-experience platform. The entire
-application — **frontend and backend** — lives in a single file
-(`api/index.js`) so it deploys to Vercel as one serverless function that
-serves the UI *and* the API.
+application — **frontend and backend** — deploys to Vercel as **one
+serverless function** (`api/index.js`, a thin entry point over the modular
+`src/` codebase) that serves the UI *and* the API.
 
 Built for: **navigation & transportation, multilingual assistance, crowd
 management, operational intelligence, real-time decision support, and
@@ -20,6 +20,7 @@ sustainability** during the FIFA World Cup 2026.
 | Navigation & transportation | Turn-by-turn directions (walking/transit/driving/bicycling) between two points | Google Directions API (`GOOGLE_MAPS_API_KEY`) |
 | Crowd management | Live (simulated) zone density dashboard with AI-generated flow guidance, refreshed every 20s | Gemini |
 | Operational intelligence | Staff incident reporting with AI severity triage + AI-generated shift briefings | Gemini + Neon Postgres |
+| Real-time decision support | Dedicated staff dashboard (`/api/dashboard`) that merges live crowd hot spots with open incidents into one ranked, refreshable priority queue — a first-class surface, not just individual AI recommendations scattered across other features | Gemini + live crowd data + Neon Postgres |
 | Sustainability | Dedicated tab with AI-curated, cached eco tips (recycling, reusable cups/bottles, transit) — a first-class surface, not just a chat answer | Gemini, with a static fallback if unset |
 | Accessibility | Skip links, ARIA live regions/tabs, high-contrast mode, adjustable text size, full keyboard support | Native HTML/CSS/JS |
 | Auth | Email/password signup & login (fan/staff roles) with bcrypt + JWT sessions | Neon Postgres (swap in Neon Auth/Stack if preferred) |
@@ -28,14 +29,53 @@ sustainability** during the FIFA World Cup 2026.
 
 ## 📁 Project structure
 
+The app still deploys as **one Vercel serverless function** — `api/index.js`
+is a thin entry point that requires `src/app.js`, and Vercel's builder
+bundles the entire `src/` dependency graph into that single function. The
+code itself is split into small, single-purpose modules for readability,
+testability, and easy extension:
+
 ```
 .
 ├── api/
-│   └── index.js       # ENTIRE app: Express backend + embedded HTML/CSS/JS frontend
+│   └── index.js              # Thin Vercel/local entry point — requires src/app.js
+├── src/
+│   ├── app.js                 # Wires config, middleware, routes, and the frontend together
+│   ├── config/
+│   │   └── env.js              # Env var reading + FEATURES capability flags
+│   ├── db/
+│   │   └── index.js            # Neon client init + idempotent schema bootstrap
+│   ├── middleware/
+│   │   ├── auth.js              # JWT signing + role-gated auth middleware
+│   │   └── security.js          # CORS, Helmet/CSP, rate limiters
+│   ├── services/
+│   │   ├── gemini.js             # Gemini generateContent wrapper (+ JSON helper)
+│   │   ├── translate.js          # Google Cloud Translation, falls back to Gemini
+│   │   ├── directions.js         # Google Directions API wrapper
+│   │   └── crowd.js               # Simulated zone telemetry + busiest-zone helper
+│   ├── routes/
+│   │   ├── health.js              # /api/health, /api/selftest
+│   │   ├── auth.js                 # /api/auth/signup, /login, /me
+│   │   ├── chat.js                  # /api/chat (multilingual assistant)
+│   │   ├── translate.js             # /api/translate
+│   │   ├── directions.js            # /api/directions
+│   │   ├── crowd.js                  # /api/crowd
+│   │   ├── sustainability.js         # /api/sustainability
+│   │   ├── incidents.js               # /api/incidents (operational intelligence)
+│   │   └── dashboard.js                # /api/dashboard (real-time decision support)
+│   ├── frontend/
+│   │   └── page.js                     # Server-rendered accessible HTML shell
+│   ├── utils/
+│   │   ├── cache.js                     # TTLCache class
+│   │   ├── validation.js                 # cleanString / normalizeLang / escapeHtml
+│   │   └── languages.js                   # Language <select> options + RTL set
+│   └── cache.js                          # Shared TTLCache instance used by routes
 ├── public/
-│   └── styles.css     # Extracted stylesheet, served as a static asset
+│   ├── styles.css              # Stylesheet, served as a static asset
+│   └── app.js                    # Frontend behavior, served as a static asset
 ├── test/
-│   └── app.test.js    # Automated tests (Node's built-in test runner)
+│   ├── app.test.js              # Integration/contract tests (Node's built-in test runner)
+│   └── unit.test.js              # Unit tests for utils/services (cache, validation, ranking)
 ├── package.json        # Dependencies + scripts
 ├── vercel.json          # Routes all requests to api/index.js
 ├── .eslintrc.json        # Lint rules (npm run lint)
@@ -57,6 +97,8 @@ sustainability** during the FIFA World Cup 2026.
 5. After deploy, sanity-check with:
    - `GET /api/health` → `{"status":"ok"}`
    - `GET /api/selftest` → shows which features are active + DB connectivity
+   - `GET /api/dashboard` (with a staff bearer token) → the real-time
+     decision-support priority queue (crowd hot spots + open incidents, ranked)
 
 ---
 
@@ -82,9 +124,10 @@ under **Settings → Environment Variables**.
 > **Note on Neon Auth:** the app ships with a working built-in email/password
 > + JWT auth (bcrypt-hashed passwords, 12-hour signed sessions) so everything
 > runs out of the box. If you have your own Neon Auth (Stack Auth) snippet,
-> open `api/index.js` and look for the comment block:
-> `>>> NEON AUTH INTEGRATION POINT <<<` — that's where to swap in your code.
-> Every other route only depends on `authMiddleware` returning
+> open `src/middleware/auth.js` and look for the comment block:
+> `>>> NEON AUTH INTEGRATION POINT <<<` — that's where to swap in your code
+> (along with the signup/login handlers in `src/routes/auth.js`). Every other
+> route only depends on `authMiddleware` returning
 > `req.user = { id, email, role }`, so nothing else needs to change.
 
 ### Where to get each key
@@ -117,18 +160,29 @@ npm run test:coverage # run with Node's built-in coverage reporter
 npm run lint           # ESLint
 ```
 
-Runs `test/app.test.js` using Node's built-in test runner — covers the HTML
-shell/accessibility landmarks, health/selftest endpoints, input validation,
-graceful degradation when optional keys are absent, auth gating on staff and
-sustainability-adjacent routes, translate/directions validation, security
-headers, and clean 404/error handling (no stack traces leaked).
+Runs `test/app.test.js` and `test/unit.test.js` using Node's built-in test
+runner.
+
+- `app.test.js` — integration/contract tests: the HTML shell/accessibility
+  landmarks, static assets (`/styles.css`, `/app.js`), health/selftest
+  endpoints, input validation, graceful degradation when optional keys are
+  absent, auth gating on staff/dashboard routes, translate/directions
+  validation, security headers, and clean 404/error handling (no stack
+  traces leaked).
+- `unit.test.js` — fast, dependency-free unit tests for the extracted
+  utility/service modules: `TTLCache` expiry, string/language validation,
+  crowd density-to-level thresholds, and the real-time decision-support
+  priority-queue ranking logic.
 
 ---
 
 ## 🔒 Security highlights
 
-- Strict CSP via Helmet, using a per-request nonce for the one inline
-  bootstrap script (no `unsafe-inline` for scripts).
+- Strict CSP via Helmet — `script-src` and `style-src` are both `'self'`
+  only, with no `unsafe-inline` and no nonce bookkeeping needed anywhere,
+  because the frontend's behavior and layout live in same-origin static
+  files (`public/app.js`, `public/styles.css`) instead of inline `<script>`/
+  `style="..."` in the HTML.
 - Rate limiting on all `/api/*` routes, with a stricter limit on `/api/chat`
   and an even stricter limit on `/api/auth/signup` and `/api/auth/login`
   (10/min) to blunt credential-stuffing and password-guessing attempts.

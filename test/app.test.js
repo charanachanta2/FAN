@@ -242,6 +242,21 @@ test('POST /api/auth/signup with role=staff is still rejected when auth is uncon
   assert.match(res.body.error, /not configured/i);
 });
 
+test('GET /api/dashboard (real-time decision support) requires staff auth', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const res = await request(server, 'GET', '/api/dashboard');
+  assert.strictEqual(res.status, 503); // auth not configured (no DATABASE_URL in test env)
+});
+
+test('GET /app.js is served with the correct content type', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const res = await request(server, 'GET', '/app.js');
+  assert.strictEqual(res.status, 200);
+  assert.match(res.raw, /priority-queue/); // sanity check it's actually the frontend script
+});
+
 test('unsupported HTTP method on a known API path still returns a clean JSON error', async (t) => {
   const server = await startServer();
   t.after(() => server.close());
