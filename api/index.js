@@ -167,9 +167,82 @@ function cleanString(input, { min = 1, max = 2000 } = {}) {
   return trimmed;
 }
 
-const ALLOWED_LANGS = new Set([
-  'en', 'es', 'fr', 'pt', 'ar', 'de', 'it', 'ja', 'ko', 'zh', 'hi', 'ru', 'nl', 'tr',
-]);
+// Matches any BCP-47-style language tag (e.g. "en", "pt-BR", "zh-Hant", "yue").
+// Rather than whitelist a handful of languages, we validate the *shape* of the
+// code and let Gemini (and Google Translate, when configured) do the actual
+// translation — this means every language Gemini can speak is supported here,
+// not just a curated subset.
+const LANG_TAG_RE = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8}){0,2}$/;
+
+function normalizeLang(input, fallback = 'en') {
+  const trimmed = cleanString(input, { min: 2, max: 20 });
+  if (!trimmed || !LANG_TAG_RE.test(trimmed)) return fallback;
+  return trimmed;
+}
+
+// A curated set of languages with native display names, used only to
+// populate the assistant's language <select> with sensible, readable
+// defaults. This list does NOT limit which languages the assistant can
+// actually respond in — see normalizeLang() / LANG_TAG_RE above. Any BCP-47
+// code (including ones not in this list) is accepted by /api/chat and
+// /api/translate.
+const LANGUAGE_OPTIONS = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'pt', name: 'Português' },
+  { code: 'pt-BR', name: 'Português (Brasil)' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'sv', name: 'Svenska' },
+  { code: 'no', name: 'Norsk' },
+  { code: 'da', name: 'Dansk' },
+  { code: 'fi', name: 'Suomi' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'cs', name: 'Čeština' },
+  { code: 'sk', name: 'Slovenčina' },
+  { code: 'hu', name: 'Magyar' },
+  { code: 'ro', name: 'Română' },
+  { code: 'bg', name: 'Български' },
+  { code: 'el', name: 'Ελληνικά' },
+  { code: 'ru', name: 'Русский' },
+  { code: 'uk', name: 'Українська' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'ar', name: 'العربية' },
+  { code: 'he', name: 'עברית' },
+  { code: 'fa', name: 'فارسی' },
+  { code: 'ur', name: 'اردو' },
+  { code: 'hi', name: 'हिन्दी' },
+  { code: 'bn', name: 'বাংলা' },
+  { code: 'pa', name: 'ਪੰਜਾਬੀ' },
+  { code: 'gu', name: 'ગુજરાતી' },
+  { code: 'mr', name: 'मराठी' },
+  { code: 'ta', name: 'தமிழ்' },
+  { code: 'te', name: 'తెలుగు' },
+  { code: 'kn', name: 'ಕನ್ನಡ' },
+  { code: 'ml', name: 'മലയാളം' },
+  { code: 'si', name: 'සිංහල' },
+  { code: 'th', name: 'ไทย' },
+  { code: 'vi', name: 'Tiếng Việt' },
+  { code: 'id', name: 'Bahasa Indonesia' },
+  { code: 'ms', name: 'Bahasa Melayu' },
+  { code: 'tl', name: 'Filipino' },
+  { code: 'zh', name: '中文（简体）' },
+  { code: 'zh-Hant', name: '中文（繁體）' },
+  { code: 'ja', name: '日本語' },
+  { code: 'ko', name: '한국어' },
+  { code: 'sw', name: 'Kiswahili' },
+  { code: 'am', name: 'አማርኛ' },
+  { code: 'ha', name: 'Hausa' },
+  { code: 'yo', name: 'Yorùbá' },
+  { code: 'ig', name: 'Igbo' },
+  { code: 'zu', name: 'isiZulu' },
+  { code: 'af', name: 'Afrikaans' },
+];
+
+// RTL languages — used client-side to flip document direction.
+const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ku']);
 
 // ----------------------------------------------------------------------------
 // 3. DATABASE BOOTSTRAP (idempotent — safe to run on every cold start)
@@ -501,10 +574,10 @@ app.post('/api/chat', chatLimiter, async (req, res, next) => {
   try {
     const message = cleanString(req.body?.message, { min: 1, max: 1000 });
     if (!message) return res.status(400).json({ error: 'A "message" field (1-1000 chars) is required.' });
-    let language = cleanString(req.body?.language, { min: 2, max: 5 }) || 'en';
-    if (!ALLOWED_LANGS.has(language)) language = 'en';
+    const language = normalizeLang(req.body?.language, 'en');
 
-    const langInstruction = language === 'en' ? '' : ` Respond in the language with ISO code "${language}".`;
+    const langInstruction = language === 'en' ? '' :
+      ` Respond in the language with BCP-47 code "${language}", using that language's native script and, where relevant, regional conventions.`;
     const reply = await callGemini(message, {
       system: ASSISTANT_SYSTEM_PROMPT + langInstruction,
     });
@@ -522,10 +595,11 @@ app.post('/api/chat', chatLimiter, async (req, res, next) => {
 app.post('/api/translate', async (req, res, next) => {
   try {
     const text = cleanString(req.body?.text, { min: 1, max: 2000 });
-    const target = cleanString(req.body?.target, { min: 2, max: 5 });
-    if (!text || !target || !ALLOWED_LANGS.has(target)) {
-      return res.status(400).json({ error: 'Fields "text" and a supported "target" language code are required.' });
+    const targetRaw = cleanString(req.body?.target, { min: 2, max: 20 });
+    if (!text || !targetRaw || !LANG_TAG_RE.test(targetRaw)) {
+      return res.status(400).json({ error: 'Fields "text" and a valid "target" language code (e.g. "es", "pt-BR") are required.' });
     }
+    const target = targetRaw;
     const translated = await callGoogleTranslate(text, target);
     res.json({ translated, target });
   } catch (err) { next(err); }
@@ -660,17 +734,11 @@ function renderPage(nonce) {
     <button id="btn-fontsize" aria-label="Increase text size">A+</button>
     <label for="lang-select" class="visually-hidden">Assistant language</label>
     <select id="lang-select" aria-label="Assistant language">
-      <option value="en">English</option>
-      <option value="es">Español</option>
-      <option value="fr">Français</option>
-      <option value="pt">Português</option>
-      <option value="ar">العربية</option>
-      <option value="de">Deutsch</option>
-      <option value="hi">हिन्दी</option>
-      <option value="zh">中文</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
+      ${LANGUAGE_OPTIONS.map((l) => `<option value="${l.code}"${l.code === 'en' ? ' selected' : ''}>${l.name}</option>`).join('\n      ')}
+      <option value="other">Other — type a language code…</option>
     </select>
+    <label for="lang-custom" class="visually-hidden">Custom language code</label>
+    <input type="text" id="lang-custom" placeholder="e.g. eo, gd, br" maxlength="20" style="display:none; width:110px;" aria-label="Custom BCP-47 language code" />
   </div>
 </header>
 
@@ -819,6 +887,28 @@ function renderPage(nonce) {
   var chatForm = document.getElementById('chat-form');
   var chatInput = document.getElementById('chat-input');
   var langSelect = document.getElementById('lang-select');
+  var langCustom = document.getElementById('lang-custom');
+  var RTL_LANGS = ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ku'];
+
+  function activeLanguage() {
+    if (langSelect.value === 'other') {
+      return (langCustom.value || '').trim().toLowerCase() || 'en';
+    }
+    return langSelect.value;
+  }
+
+  function applyDirection(lang) {
+    var base = lang.split('-')[0].toLowerCase();
+    var isRtl = RTL_LANGS.indexOf(base) !== -1;
+    document.documentElement.setAttribute('dir', isRtl ? 'rtl' : 'ltr');
+  }
+
+  langSelect.addEventListener('change', function () {
+    var isOther = langSelect.value === 'other';
+    langCustom.style.display = isOther ? '' : 'none';
+    if (isOther) { langCustom.focus(); } else { applyDirection(langSelect.value); }
+  });
+  langCustom.addEventListener('input', function () { applyDirection(activeLanguage()); });
 
   function appendMessage(text, who) {
     var div = document.createElement('div');
@@ -834,10 +924,12 @@ function renderPage(nonce) {
     if (!message) return;
     appendMessage(message, 'user');
     chatInput.value = '';
+    var language = activeLanguage();
+    applyDirection(language);
     fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: message, language: langSelect.value })
+      body: JSON.stringify({ message: message, language: language })
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
