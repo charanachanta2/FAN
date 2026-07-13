@@ -114,7 +114,19 @@ function warnMissing() {
 }
 warnMissing();
 
-const sql = FEATURES.db ? neon(ENV.DATABASE_URL) : null;
+let sql = null;
+if (FEATURES.db) {
+  try {
+    sql = neon(ENV.DATABASE_URL);
+  } catch (err) {
+    // A malformed DATABASE_URL must never crash the whole serverless function
+    // (that would take down routes that have nothing to do with the DB).
+    // eslint-disable-next-line no-console
+    console.error('[stadium-copilot] Failed to initialize Neon client — DB features disabled:', err.message);
+    FEATURES.db = false;
+    FEATURES.auth = false;
+  }
+}
 
 // ----------------------------------------------------------------------------
 // 2. SMALL UTILITIES
@@ -248,7 +260,7 @@ function authMiddleware(requiredRole) {
 // 5. GENERATIVE AI HELPERS (Gemini) + GOOGLE APIS (Maps / Translate)
 // ----------------------------------------------------------------------------
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 /**
  * Calls Gemini's generateContent REST endpoint directly (no extra SDK
@@ -1058,7 +1070,7 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   // Never leak internal error details/stack traces to the client.
   // eslint-disable-next-line no-console
-  console.error('[stadium-copilot] Unhandled error:', err && err.message);
+  console.error('[stadium-copilot] Unhandled error:', err && (err.stack || err.message));
   const status = err && err.code && Number.isInteger(err.code) ? err.code : 500;
   res.status(status).json({ error: 'An internal error occurred. Please try again.' });
 });
