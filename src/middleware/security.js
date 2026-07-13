@@ -40,7 +40,6 @@ const authLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true
 
 module.exports = {
   corsMiddleware,
-  nonceMiddleware,
   helmetMiddleware,
   apiLimiter,
   chatLimiter,
