@@ -1,0 +1,32 @@
+{
+  "name": "stadium-copilot-worldcup2026",
+  "version": "1.1.0",
+  "private": true,
+  "description": "GenAI-powered stadium operations & fan experience platform for FIFA World Cup 2026 (single-file Express app, deployable to Vercel).",
+  "main": "api/index.js",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node api/index.js",
+    "test": "node --test test/",
+    "test:coverage": "node --experimental-test-coverage --test test/",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^7.4.0",
+    "@neondatabase/serverless": "^0.9.4",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

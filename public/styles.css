@@ -1,0 +1,380 @@
+/* ============================================================================
+   STADIUM COPILOT — VISUAL SYSTEM
+   Direction: matchday scoreboard + pitch-side signage, not another dark
+   dashboard. Turf green instead of navy, floodlight gold instead of a single
+   generic accent, tabular scoreboard digits for live data, corner-flag
+   texture on panels. No external fonts — everything below is system-font
+   only, so the CSP and "dependency-free" promise in the header stay intact.
+   ============================================================================ */
+
+:root {
+  /* --- core palette -------------------------------------------------- */
+  --turf-900: #081f16;   /* page background — pitch under floodlights at night */
+  --turf-700: #0f3324;   /* panel background */
+  --turf-600: #16452f;   /* borders / hairlines */
+  --turf-500: #1f5a3d;   /* hover surfaces */
+  --chalk: #f4f7f2;      /* primary text — pitch line white */
+  --chalk-dim: #a9c2b4;  /* muted text, green-tinted */
+  --floodlight: #ffc933; /* primary accent / CTAs */
+  --floodlight-ink: #241900; /* text on floodlight gold */
+  --alert: #ff5c5c;      /* danger / critical */
+
+  /* --- semaphore scale (crowd + severity) ----------------------------- */
+  --sema-low: #4ddc84;
+  --sema-moderate: #ffd23f;
+  --sema-high: #ff9a3d;
+  --sema-critical: #ff5c5c;
+
+  /* --- legacy aliases kept for anything referencing old tokens -------- */
+  --bg: var(--turf-900);
+  --bg-panel: var(--turf-700);
+  --accent: var(--floodlight);
+  --accent-2: var(--sema-moderate);
+  --text: var(--chalk);
+  --muted: var(--chalk-dim);
+  --danger: var(--alert);
+  --radius: 10px;
+  --focus: 3px solid var(--floodlight);
+
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+[data-contrast="high"] {
+  --turf-900: #000000;
+  --turf-700: #000000;
+  --turf-600: #ffffff;
+  --turf-500: #1a1a1a;
+  --chalk: #ffffff;
+  --chalk-dim: #ffffff;
+  --floodlight: #ffe600;
+  --floodlight-ink: #000000;
+  --alert: #ff6b6b;
+  --sema-low: #5dffa0;
+  --sema-moderate: #ffe600;
+  --sema-high: #ffb04d;
+  --sema-critical: #ff6b6b;
+  --bg: var(--turf-900);
+  --bg-panel: var(--turf-700);
+  --accent: var(--floodlight);
+  --text: var(--chalk);
+  --muted: var(--chalk-dim);
+  --danger: var(--alert);
+}
+
+* { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+html { font-size: 100%; }
+html[data-fontsize="lg"] { font-size: 118%; }
+html[data-fontsize="xl"] { font-size: 135%; }
+
+/* ---------------------------------------------------------------------
+   BODY — turf gradient + faint mowed-stripe texture + floodlight glow
+   ---------------------------------------------------------------------*/
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.55;
+  background-color: var(--turf-900);
+  background-image:
+    radial-gradient(1200px 500px at 50% -80px, #2a6b3f33, transparent 65%),
+    repeating-linear-gradient(
+      90deg,
+      #ffffff05 0px, #ffffff05 48px,
+      transparent 48px, transparent 96px
+    ),
+    linear-gradient(180deg, #0a2a1c 0%, var(--turf-900) 30%, #071a12 100%);
+  background-attachment: fixed;
+}
+
+[data-contrast="high"] body { background-image: none; }
+
+a { color: var(--floodlight); text-underline-offset: 3px; }
+
+.skip-link {
+  position: absolute; inset-inline-start: -999px; top: 0;
+  background: var(--floodlight); color: var(--floodlight-ink);
+  font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  padding: 12px 18px; z-index: 100; border-radius: 0 0 8px 0;
+}
+.skip-link:focus { inset-inline-start: 0; }
+
+/* ---------------------------------------------------------------------
+   HEADER — scoreboard marquee
+   ---------------------------------------------------------------------*/
+header.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 22px;
+  background: linear-gradient(180deg, #0d2e1f, #0a2318);
+  border-bottom: 3px solid var(--floodlight);
+  box-shadow: 0 6px 24px -8px #000a, inset 0 -14px 24px -20px #ffc93355;
+  flex-wrap: wrap;
+}
+header.top h1 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 900;
+  letter-spacing: .01em;
+  margin: 0;
+  display: flex; align-items: center; gap: 12px;
+  color: var(--chalk);
+}
+.badge {
+  background: var(--floodlight);
+  color: var(--floodlight-ink);
+  font-weight: 800;
+  font-size: .68rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  padding: 5px 12px 5px 10px;
+  position: relative;
+  border-radius: 3px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 8px 100%, 0 60%);
+}
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+button, select, input[type=text] {
+  font: inherit;
+  color: var(--text);
+  background: #ffffff0f;
+  border: 1px solid var(--turf-600);
+  border-radius: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+button {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: .78rem;
+  letter-spacing: .05em;
+  transition: transform .12s ease, background .15s ease, border-color .15s ease;
+}
+button:hover { background: #ffffff22; border-color: var(--turf-500); transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: var(--focus); outline-offset: 2px;
+}
+
+/* primary-looking action buttons (submit buttons across forms) */
+form button[type="submit"], #btn-refresh-crowd, #btn-refresh-incidents {
+  background: var(--floodlight);
+  color: var(--floodlight-ink);
+  border-color: var(--floodlight);
+}
+form button[type="submit"]:hover, #btn-refresh-crowd:hover, #btn-refresh-incidents:hover {
+  background: #ffd75c;
+  border-color: #ffd75c;
+}
+
+#btn-contrast[aria-pressed="true"] {
+  background: var(--floodlight);
+  color: var(--floodlight-ink);
+  border-color: var(--floodlight);
+}
+
+/* ---------------------------------------------------------------------
+   LAYOUT
+   ---------------------------------------------------------------------*/
+main { max-width: 1080px; margin: 0 auto; padding: 24px 20px 60px; }
+
+nav.tabs {
+  display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--turf-600);
+  padding-bottom: 0;
+}
+nav.tabs button {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  color: var(--chalk-dim);
+  padding: 10px 16px;
+}
+nav.tabs button:hover { background: #ffffff0d; color: var(--chalk); }
+nav.tabs button[aria-selected="true"] {
+  color: var(--floodlight);
+  border-bottom-color: var(--floodlight);
+  background: #ffc93314;
+}
+
+/* ---------------------------------------------------------------------
+   PANELS — corner-flag texture
+   ---------------------------------------------------------------------*/
+section.panel {
+  background: linear-gradient(180deg, #ffffff0a, #ffffff04), var(--turf-700);
+  border: 1px solid var(--turf-600);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+section.panel::before {
+  /* corner flag */
+  content: "";
+  position: absolute;
+  top: 0; inset-inline-end: 0;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 34px 34px 0;
+  border-color: transparent var(--floodlight) transparent transparent;
+  opacity: .9;
+}
+section.panel h2 {
+  font-family: var(--font-display);
+  margin-top: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: .01em;
+  color: var(--chalk);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+section.panel h2::before {
+  content: "";
+  width: 4px; height: 1em;
+  background: var(--floodlight);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* ---------------------------------------------------------------------
+   CROWD ZONE CARDS — scoreboard tiles (signature element)
+   ---------------------------------------------------------------------*/
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); gap: 14px; }
+/* .grid is also reused on the <ul id="sustainability-list"> — strip default
+   list styling there so the tip cards match the crowd zone-card grid. */
+ul.grid { list-style: none; margin: 0; padding: 0; }
+
+.zone-card {
+  border: 1px solid var(--turf-600);
+  border-radius: 8px;
+  padding: 14px 16px 12px;
+  background: #04140c;
+  position: relative;
+  padding-bottom: 18px;
+  box-shadow: inset 0 1px 0 #ffffff0d;
+}
+.zone-card::after {
+  /* semaphore bar along the bottom, colored via :has() below */
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 5px;
+  background: var(--turf-600);
+}
+.zone-card:has(.level-Low)::after { background: var(--sema-low); }
+.zone-card:has(.level-Moderate)::after { background: var(--sema-moderate); }
+.zone-card:has(.level-High)::after { background: var(--sema-high); }
+.zone-card:has(.level-Critical)::after {
+  background: var(--sema-critical);
+  box-shadow: 0 0 12px 1px var(--sema-critical);
+}
+.zone-card:has(.level-Critical) { border-color: var(--sema-critical); }
+
+.zone-card > div:first-child {
+  text-transform: uppercase;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--chalk-dim);
+  margin-bottom: 6px;
+}
+.zone-card .density {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+.level-Low { color: var(--sema-low); } .level-Moderate { color: var(--sema-moderate); }
+.level-High { color: var(--sema-high); } .level-Critical { color: var(--sema-critical); }
+
+.zone-card .status {
+  margin-top: 4px;
+  text-transform: uppercase;
+  font-size: .68rem;
+  letter-spacing: .07em;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------------
+   CHAT ASSISTANT
+   ---------------------------------------------------------------------*/
+.chat-log {
+  max-height: 340px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px;
+  background: #04140c;
+  border: 1px solid var(--turf-600);
+  border-radius: 8px;
+}
+.msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: .93rem; }
+.msg.user {
+  align-self: flex-end;
+  background: var(--floodlight);
+  color: var(--floodlight-ink);
+  font-weight: 600;
+  border-bottom-right-radius: 3px;
+}
+.msg.bot {
+  align-self: flex-start;
+  background: var(--turf-600);
+  color: var(--chalk);
+  border-bottom-left-radius: 3px;
+}
+
+form.row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+form.row input[type=text] { flex: 1; min-width: 180px; }
+
+label {
+  display: block; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em;
+  font-weight: 700; color: var(--chalk-dim); margin-bottom: 5px;
+}
+.field { margin-bottom: 12px; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;
+}
+.status { font-size: .87rem; color: var(--chalk-dim); }
+
+/* ---------------------------------------------------------------------
+   DIRECTIONS RESULT
+   ---------------------------------------------------------------------*/
+#directions-result { margin-top: 10px; }
+#directions-result ol { padding-inline-start: 22px; display: grid; gap: 6px; }
+#directions-result li { font-size: .92rem; }
+
+/* ---------------------------------------------------------------------
+   STAFF DASHBOARD — table styled like a team sheet
+   ---------------------------------------------------------------------*/
+table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+thead th {
+  text-align: start; padding: 8px 8px;
+  text-transform: uppercase; font-size: .68rem; letter-spacing: .07em;
+  color: var(--chalk-dim);
+  border-bottom: 2px solid var(--turf-600);
+}
+td { text-align: start; padding: 10px 8px; border-bottom: 1px solid var(--turf-600); font-size: .9rem; }
+tbody tr:hover { background: #ffffff08; }
+tbody tr:has(.sev-Critical) { background: #ff5c5c14; }
+tbody tr:has(.sev-High) { background: #ff9a3d10; }
+
+.sev-Critical { color: var(--sema-critical); font-weight: 800; }
+.sev-High { color: var(--sema-high); font-weight: 800; }
+.sev-Medium { color: var(--sema-moderate); font-weight: 700; }
+.sev-Low { color: var(--sema-low); font-weight: 700; }
+
+footer {
+  text-align: center; color: var(--chalk-dim);
+  padding: 26px; font-size: .78rem;
+  border-top: 1px solid var(--turf-600);
+  letter-spacing: .02em;
+}
